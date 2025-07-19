@@ -174,9 +174,17 @@ curl -X POST http://localhost:8000/decrypt \
        "timestamp": "12:00:00"
      }
      ```
-3. Create another `POST` request to `/decrypt` similarly.
+3. Create another `POST` request to `/decrypt` similarly with the following body format:
+
+     ```json
+     {
+       "encrypted": "<encrypted_string>",
+       "timestamp": "12:00:00"
+     }
+     ```
 
 ✅ You can also import OpenAPI spec from `/openapi.json` in Postman.
+     }
 
 ---
 
