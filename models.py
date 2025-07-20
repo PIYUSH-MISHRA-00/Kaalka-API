@@ -14,3 +14,9 @@ class DecryptRequest(BaseModel):
 
 class DecryptResponse(BaseModel):
     decrypted: str = Field(..., description="The decrypted message")
+
+class EncryptFileResponse(BaseModel):
+    encrypted_file: str = Field(..., description="Base64 encoded encrypted file content")
+
+class DecryptFileResponse(BaseModel):
+    decrypted_file: str = Field(..., description="Base64 encoded decrypted file content")
