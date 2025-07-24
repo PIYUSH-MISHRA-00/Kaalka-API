@@ -44,6 +44,7 @@ coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
+.pytest_cache/
 
 # Translations
 *.mo
@@ -82,7 +83,6 @@ pipenv.lock
 
 # pytest
 .cache
-.pytest_cache/
 
 # mypy
 .mypy_cache/
@@ -101,9 +101,21 @@ cython_debug/
 # VSCode settings
 .vscode/
 
-# Virtual environments
-venv/
-ENV/
-env/
-env.bak/
-venv.bak/
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+
+# Logs
+*.log
+
+# Encrypted and decrypted files folders (if created)
+encrypted/
+decrypted/

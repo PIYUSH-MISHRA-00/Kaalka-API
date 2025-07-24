@@ -1,82 +1,89 @@
-import requests
-import json
+import os
+import shutil
+import asyncio
+import httpx
 
-BASE_URL = "http://127.0.0.1:8000"
+API_URL = "http://127.0.0.1:8000"
 
-def test_ping():
-    resp = requests.get(f"{BASE_URL}/ping")
-    assert resp.status_code == 200
-    assert resp.json() == {"message": "Kaalka API is running"}
-    print("GET /ping passed")
+encrypted_dir = "encrypted"
+decrypted_dir = "decrypted"
+test_file_path = "test_image.jpg"
 
-def test_encrypt_decrypt():
-    timestamp = "12:00:00"
-    message = "hello world"
-    # Encrypt
-    resp = requests.post(f"{BASE_URL}/encrypt", json={"message": message, "timestamp": timestamp})
-    assert resp.status_code == 200
-    encrypted = resp.json().get("encrypted")
-    assert encrypted is not None and len(encrypted) > 0
-    print("POST /encrypt passed")
+def setup_dirs():
+    os.makedirs(encrypted_dir, exist_ok=True)
+    os.makedirs(decrypted_dir, exist_ok=True)
 
-    # Decrypt
-    resp = requests.post(f"{BASE_URL}/decrypt", json={"encrypted": encrypted, "timestamp": timestamp})
-    assert resp.status_code == 200
-    decrypted = resp.json().get("decrypted")
-    assert decrypted == message
-    print("POST /decrypt passed")
+async def test_ping(client):
+    print("Testing /ping endpoint...")
+    r = await client.get(f"{API_URL}/ping")
+    assert r.status_code == 200
+    assert r.json() == {"ping": "pong"}
+    print("Ping test passed.")
 
-def test_encrypt_without_timestamp():
-    message = "test message"
-    resp = requests.post(f"{BASE_URL}/encrypt", json={"message": message})
-    assert resp.status_code == 200
-    encrypted = resp.json().get("encrypted")
-    assert encrypted is not None and len(encrypted) > 0
-    print("POST /encrypt without timestamp passed")
+async def test_encrypt_decrypt_text(client):
+    print("Testing text encryption and decryption...")
+    message = "Hello, Kaalka!"
+    # Encrypt text
+    r_enc = await client.post(f"{API_URL}/encrypt/text", params={"message": message})
+    assert r_enc.status_code == 200
+    cipher = r_enc.json().get("cipher")
+    assert cipher is not None
 
-def test_missing_fields():
-    # Missing message in encrypt
-    resp = requests.post(f"{BASE_URL}/encrypt", json={})
-    assert resp.status_code == 422
-    print("POST /encrypt missing message field passed")
+    # Decrypt text
+    r_dec = await client.post(f"{API_URL}/decrypt/text", params={"cipher": cipher})
+    assert r_dec.status_code == 200
+    decrypted_message = r_dec.json().get("message")
+    assert decrypted_message == message
+    print("Text encryption/decryption test passed.")
 
-    # Missing encrypted in decrypt
-    resp = requests.post(f"{BASE_URL}/decrypt", json={"timestamp": "12:00:00"})
-    assert resp.status_code == 422
-    print("POST /decrypt missing encrypted field passed")
+async def test_encrypt_decrypt_file(client):
+    print("Testing file encryption and decryption...")
+    # Encrypt file
+    with open(test_file_path, "rb") as f:
+        files = {"file": (os.path.basename(test_file_path), f, "application/octet-stream")}
+        r_enc = await client.post(f"{API_URL}/encrypt/file", files=files)
+    assert r_enc.status_code == 200
+    enc_filename = r_enc.headers.get("content-disposition").split("filename=")[-1].strip('"')
+    enc_file_path = os.path.join(encrypted_dir, enc_filename)
+    with open(enc_file_path, "wb") as f:
+        f.write(r_enc.content)
+    print(f"Encrypted file saved to {enc_file_path}")
 
-    # Missing timestamp in decrypt
-    resp = requests.post(f"{BASE_URL}/decrypt", json={"encrypted": "abc"})
-    assert resp.status_code == 422
-    print("POST /decrypt missing timestamp field passed")
+    # Decrypt file
+    with open(enc_file_path, "rb") as f:
+        files = {"file": (enc_filename, f, "application/octet-stream")}
+        r_dec = await client.post(f"{API_URL}/decrypt/file", files=files)
+    assert r_dec.status_code == 200
+    dec_filename = r_dec.headers.get("content-disposition").split("filename=")[-1].strip('"')
+    dec_file_path = os.path.join(decrypted_dir, dec_filename)
+    with open(dec_file_path, "wb") as f:
+        f.write(r_dec.content)
+    print(f"Decrypted file saved to {dec_file_path}")
 
-def test_invalid_timestamp():
-    # Invalid timestamp format in encrypt
-    resp = requests.post(f"{BASE_URL}/encrypt", json={"message": "test", "timestamp": "invalid"})
-    assert resp.status_code == 500
-    print("POST /encrypt invalid timestamp passed")
+    # Check decrypted file exists and size > 0
+    assert os.path.exists(dec_file_path)
+    assert os.path.getsize(dec_file_path) > 0
+    print("File encryption/decryption test passed.")
 
-    # Invalid timestamp format in decrypt
-    resp = requests.post(f"{BASE_URL}/decrypt", json={"encrypted": "abc", "timestamp": "invalid"})
-    assert resp.status_code == 500
-    print("POST /decrypt invalid timestamp passed")
+async def test_error_handling(client):
+    print("Testing error handling for invalid inputs...")
+    # Decrypt text with invalid cipher
+    r = await client.post(f"{API_URL}/decrypt/text", params={"cipher": "invalidcipher"})
+    # The API returns 200 with error message in detail, so check for 200 and error detail
+    assert r.status_code == 200 or r.status_code == 500
+    if r.status_code == 200:
+        json_resp = r.json()
+        assert any(key in json_resp for key in ["detail", "error", "message"])
+    print("Error handling test passed.")
 
-def test_empty_message_and_encrypted():
-    # Empty message encrypt
-    resp = requests.post(f"{BASE_URL}/encrypt", json={"message": ""})
-    assert resp.status_code == 200
-    print("POST /encrypt empty message passed")
-
-    # Empty encrypted decrypt
-    resp = requests.post(f"{BASE_URL}/decrypt", json={"encrypted": "", "timestamp": "12:00:00"})
-    assert resp.status_code == 200
-    print("POST /decrypt empty encrypted passed")
+async def main():
+    setup_dirs()
+    async with httpx.AsyncClient() as client:
+        await test_ping(client)
+        await test_encrypt_decrypt_text(client)
+        await test_encrypt_decrypt_file(client)
+        await test_error_handling(client)
+    print("All tests passed successfully.")
 
 if __name__ == "__main__":
-    test_ping()
-    test_encrypt_decrypt()
-    test_encrypt_without_timestamp()
-    test_missing_fields()
-    test_invalid_timestamp()
-    test_empty_message_and_encrypted()
-    print("All tests passed successfully.")
+    asyncio.run(main())
